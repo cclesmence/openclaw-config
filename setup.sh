@@ -147,7 +147,35 @@ launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist 2>/dev/null || t
 echo "✅ Gateway đang chạy"
 
 # ─────────────────────────────────────────
-# 7. Xong
+# 7. Đăng nhập OpenAI
+# ─────────────────────────────────────────
+echo ""
+echo "🤖 Đăng nhập OpenAI (cần thiết để agent hoạt động)..."
+echo ""
+
+# Kiểm tra đã login chưa
+OPENAI_STATUS=$(openclaw models status 2>/dev/null | grep -i "openai" || echo "")
+if echo "$OPENAI_STATUS" | grep -qi "ok\|ready\|authenticated"; then
+  echo "✅ OpenAI đã đăng nhập"
+else
+  echo "Cần đăng nhập OpenAI để agent có thể generate cover letter và xử lý lệnh."
+  echo ""
+  read -p "Nhấn Enter để mở trình duyệt đăng nhập OpenAI..." _
+
+  # Chạy configure chỉ phần OpenAI login
+  openclaw configure 2>/dev/null || true
+
+  echo ""
+  echo "✅ Nếu đăng nhập thành công, gateway sẽ tự nhận token."
+
+  # Restart gateway để apply auth mới
+  launchctl unload ~/Library/LaunchAgents/ai.openclaw.gateway.plist 2>/dev/null || true
+  sleep 1
+  launchctl load ~/Library/LaunchAgents/ai.openclaw.gateway.plist 2>/dev/null || true
+fi
+
+# ─────────────────────────────────────────
+# 8. Xong
 # ─────────────────────────────────────────
 echo ""
 echo "🎉 Setup hoàn tất!"
@@ -172,3 +200,4 @@ echo "Lệnh hữu ích:"
 echo "  bash setup.sh --update-token   → Cập nhật Telegram token"
 echo "  bash setup.sh --reset          → Setup lại từ đầu"
 echo "  openclaw logs --follow         → Xem log realtime"
+echo "  openclaw models status         → Kiểm tra OpenAI auth"
