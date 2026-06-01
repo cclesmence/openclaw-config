@@ -30,7 +30,7 @@ COVER_LETTER:
    #### Hourly
    1. *How often do you want a rate increase?* → **"Never"**
    2. Hourly rate → **15**
-   3. Your bid → set to **0** (or leave empty/removed if the UI allows)
+   3. Boost your proposal (optional) → set Your bid to **0** (or leave empty/removed if the UI allows)
    4. Cover letter → paste the provided cover letter text
 
    #### Fixed
@@ -38,10 +38,15 @@ COVER_LETTER:
    2. Duration → **"1 to 3 months"**
    3. Cover letter → paste the provided cover letter text
 
-6. **Submit** — click "Send Proposal" or "Send"
+6. **Handle extra Upwork questions** — if additional text inputs appear (e.g., "Describe your past project"), follow this order:
+   1. If the `/apply` request already included an explicit answer, paste it verbatim.
+   2. Otherwise, type **"None"** in each extra field so the form is not empty.
+   3. If submission fails with `Value is required and can't be empty` (meaning Upwork demands a real answer), stop, capture the full question text, and report back asking the user for the required content. Once the user supplies it, fill that answer and leave the other extra fields as **"None"**.
+
+7. **Submit** — click "Send Proposal" or "Send"
    - If "3 things you need to know" modal appears: check "Yes, I understand" → click "Continue"
 
-7. **Report back** via Telegram:
+8. **Report back** via Telegram:
    ```
    ✅ Applied to job ~<job_id> successfully.
    Cover letter:

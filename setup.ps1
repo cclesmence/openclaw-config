@@ -1,15 +1,89 @@
 # setup.ps1 — Cài đặt OpenClaw trên Windows
 # Chạy: powershell -ExecutionPolicy Bypass -File setup.ps1
 
+param(
+    [switch]$UpdateToken,
+    [switch]$Reset
+)
+
 $ErrorActionPreference = "Stop"
 
 $OPENCLAW_DIR = "$env:USERPROFILE\.openclaw"
 $REPO_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+function Restart-OpenClawGateway {
+    Write-Host ""
+    Write-Host "♻️  Restart gateway..." -ForegroundColor Yellow
+
+    $nssmCmd = Get-Command nssm -ErrorAction SilentlyContinue
+    if ($nssmCmd) {
+        try {
+            nssm restart OpenClawGateway | Out-Null
+        } catch {
+            # ignore if service not installed via NSSM
+        }
+    }
+
+    try {
+        Restart-ScheduledTask -TaskName "OpenClawGateway" -ErrorAction Stop | Out-Null
+    } catch {
+        # ignore if Task Scheduler path not used
+    }
+
+    Write-Host "✅ Gateway đã restart (nếu service tồn tại)" -ForegroundColor Green
+}
+
 Write-Host ""
 Write-Host "🦞 OpenClaw Setup Script (Windows)" -ForegroundColor Cyan
 Write-Host "====================================" -ForegroundColor Cyan
 Write-Host ""
+
+# --- Option: -UpdateToken ---
+if ($UpdateToken) {
+    Write-Host "🔄 Cập nhật Telegram token..." -ForegroundColor Yellow
+    Write-Host ""
+
+    do {
+        $NEW_TOKEN = Read-Host "Telegram Bot Token mới"
+        if ([string]::IsNullOrWhiteSpace($NEW_TOKEN)) {
+            Write-Host "❌ Token không được để trống." -ForegroundColor Red
+        }
+    } while ([string]::IsNullOrWhiteSpace($NEW_TOKEN))
+
+    $NEW_USER_ID = Read-Host "Telegram User ID (Enter để giữ nguyên)"
+
+    & openclaw config set channels.telegram.botToken $NEW_TOKEN | Out-Null
+
+    if (-not [string]::IsNullOrWhiteSpace($NEW_USER_ID)) {
+        $allowFrom = ('["{0}"]' -f $NEW_USER_ID)
+        $ownerAllow = ('["telegram:{0}"]' -f $NEW_USER_ID)
+        & openclaw config set channels.telegram.allowFrom $allowFrom | Out-Null
+        & openclaw config set commands.ownerAllowFrom $ownerAllow | Out-Null
+    }
+
+    Restart-OpenClawGateway
+
+    Write-Host "✅ Token đã cập nhật và gateway đã restart" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Kiểm tra kết nối: openclaw status --deep" -ForegroundColor Cyan
+    exit 0
+}
+
+# --- Option: -Reset ---
+if ($Reset) {
+    Write-Host "⚠️  Reset sẽ xóa openclaw.json hiện tại." -ForegroundColor Yellow
+    $confirm = Read-Host "Bạn chắc chắn? (y/N)"
+    if ($confirm -ne "y" -and $confirm -ne "Y") {
+        Write-Host "Hủy." -ForegroundColor Yellow
+        exit 0
+    }
+    $configFile = Join-Path $OPENCLAW_DIR "openclaw.json"
+    if (Test-Path $configFile) {
+        Remove-Item -Force $configFile
+    }
+    Write-Host "✅ Đã xóa openclaw.json, tiếp tục setup..." -ForegroundColor Green
+    Write-Host ""
+}
 
 # --- 1. Kiểm tra Node.js ---
 try {
@@ -47,15 +121,26 @@ $configPath = "$OPENCLAW_DIR\openclaw.json"
 
 if (Test-Path $configPath) {
     Write-Host ""
-    Write-Host "⚠️  ~/.openclaw/openclaw.json đã tồn tại. Bỏ qua (không ghi đè)." -ForegroundColor Yellow
-    Write-Host "   Nếu muốn reset: xóa file đó rồi chạy lại script này." -ForegroundColor Yellow
+    Write-Host "⚠️  $configPath đã tồn tại." -ForegroundColor Yellow
+    Write-Host "   Để update token: powershell -ExecutionPolicy Bypass -File setup.ps1 -UpdateToken" -ForegroundColor Yellow
+    Write-Host "   Để setup lại từ đầu: powershell -ExecutionPolicy Bypass -File setup.ps1 -Reset" -ForegroundColor Yellow
 } else {
     Write-Host ""
     Write-Host "⚙️  Tạo openclaw.json từ template..." -ForegroundColor Yellow
 
-    $TELEGRAM_TOKEN = Read-Host "Telegram Bot Token"
-    $TELEGRAM_USER_ID = Read-Host "Telegram User ID của bạn"
-    $OPENAI_EMAIL = Read-Host "OpenAI email (dùng để login Codex)"
+    do {
+        $TELEGRAM_TOKEN = Read-Host "Telegram Bot Token"
+        if ([string]::IsNullOrWhiteSpace($TELEGRAM_TOKEN)) {
+            Write-Host "❌ Token không được để trống." -ForegroundColor Red
+        }
+    } while ([string]::IsNullOrWhiteSpace($TELEGRAM_TOKEN))
+
+    do {
+        $TELEGRAM_USER_ID = Read-Host "Telegram User ID của bạn"
+        if ([string]::IsNullOrWhiteSpace($TELEGRAM_USER_ID)) {
+            Write-Host "❌ User ID không được để trống." -ForegroundColor Red
+        }
+    } while ([string]::IsNullOrWhiteSpace($TELEGRAM_USER_ID))
 
     # Tạo random gateway token
     $bytes = New-Object byte[] 24
@@ -156,7 +241,30 @@ Start-Process -FilePath "$chromePath" -ArgumentList @(
     Write-Host "⚠️  Chrome không tìm thấy. Tải tại: https://www.google.com/chrome" -ForegroundColor Yellow
 }
 
-# --- 8. Xong ---
+# --- 8. Đăng nhập OpenAI ---
+Write-Host ""
+Write-Host "🤖 Đăng nhập OpenAI (cần thiết để agent hoạt động)..." -ForegroundColor Yellow
+Write-Host ""
+
+$openaiStatus = ""
+try {
+    $openaiStatus = & openclaw models status 2>$null
+} catch {
+    $openaiStatus = ""
+}
+
+if ($openaiStatus -match "(?i)(ok|ready|authenticated)") {
+    Write-Host "✅ OpenAI đã đăng nhập" -ForegroundColor Green
+} else {
+    Write-Host "Cần đăng nhập OpenAI để agent có thể xử lý lệnh." -ForegroundColor Yellow
+    Read-Host "Nhấn Enter để chạy 'openclaw configure' và mở trình duyệt đăng nhập" | Out-Null
+    & openclaw configure 2>$null
+    Write-Host ""
+    Write-Host "✅ Nếu đăng nhập thành công, gateway sẽ tự nhận token." -ForegroundColor Green
+    Restart-OpenClawGateway
+}
+
+# --- 9. Xong ---
 Write-Host ""
 Write-Host "🎉 Setup hoàn tất!" -ForegroundColor Green
 Write-Host ""

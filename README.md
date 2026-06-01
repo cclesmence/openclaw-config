@@ -133,6 +133,14 @@ diff agents/main/BOOTSTRAP.md ~/.openclaw/agents/main/BOOTSTRAP.md
 diff agents/main/BOOTSTRAP.md ~/.openclaw/workspace/BOOTSTRAP.md
 ```
 
+### Xóa session cũ của agent (nếu cần)
+
+Nếu gateway vẫn giữ session cũ sau khi cập nhật BOOTSTRAP, xóa file session rồi để agent tạo lại:
+
+```bash
+rm -f ~/.openclaw/agents/main/sessions/sessions.json
+```
+
 ### “Prime” session auto-apply
 
 Sau khi restart, gửi một lệnh mở đầu để agent hiểu vai trò trước khi nhận `/apply` (ví dụ session key `agent:main:auto-apply`):
